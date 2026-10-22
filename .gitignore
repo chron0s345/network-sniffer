@@ -1,0 +1,30 @@
+# Secrets & lokale Konfiguration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Abhängigkeiten & Build-Artefakte
+node_modules/
+dist/
+build/
+target/
+bin/
+obj/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Test & Coverage
+coverage/
+.coverage
+htmlcov/
+*.lcov
+
+# Editor/OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

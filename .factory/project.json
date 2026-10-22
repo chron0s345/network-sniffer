@@ -1,0 +1,37 @@
+{
+  "name": "network-sniffer",
+  "githubRepo": "chron0s345/network-sniffer",
+  "jira": {
+    "siteUrl": "https://christianjanz90.atlassian.net",
+    "cloudId": "03140ad5-7f79-4917-a50c-60f6e749a9f2",
+    "projectKey": "KAN",
+    "projectLabel": "network-sniffer",
+    "statuses": {
+      "todo": "Zu erledigen",
+      "inProgress": "In Bearbeitung",
+      "inReview": "In Überprüfung",
+      "done": "Erledigt"
+    },
+    "transitionIds": {
+      "todo": "11",
+      "inProgress": "21",
+      "inReview": "31",
+      "done": "41"
+    }
+  },
+  "confluence": {
+    "spaceKey": "SOFTWAREEN",
+    "projectPageId": "589825",
+    "architecturePageId": "622593",
+    "sprintsPageId": "655361",
+    "releasesPageId": "688129"
+  },
+  "process": {
+    "currentSprint": 0,
+    "sprintGoal": "",
+    "sprintCapacityPoints": 20,
+    "wipLimit": 1,
+    "maxReviewRounds": 3,
+    "coverageMin": 80
+  }
+}

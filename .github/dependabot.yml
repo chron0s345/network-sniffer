@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+  # Der devops-engineer ergänzt hier das Ökosystem des gewählten Stacks (npm, pip, maven, nuget, ...).

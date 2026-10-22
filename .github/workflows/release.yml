@@ -1,0 +1,41 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Erzeugt/aktualisiert den Release-PR (Version + CHANGELOG aus Conventional Commits)
+  # und legt nach dessen Merge Tag und GitHub-Release an.
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          # Mit GITHUB_TOKEN erstellte PRs lösen keine Checks aus -> Auto-Merge hinge. Daher PAT bevorzugen.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  deploy:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      # Wird vom devops-engineer anhand des Deployment-ADRs umgesetzt.
+      - run: echo "Deployment von ${{ needs.release-please.outputs.tag_name }} – noch nicht konfiguriert."

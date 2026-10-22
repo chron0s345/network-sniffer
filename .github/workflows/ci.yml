@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job-Name ist Required Check der Branch-Protection – nicht umbenennen.
+  # Generische Stack-Erkennung; der devops-engineer schneidet den Job nach der Stack-Entscheidung zu.
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      COVERAGE_MIN: ${{ vars.COVERAGE_MIN || '80' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Node.js ---
+      - if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: hashFiles('package.json') != ''
+        run: |
+          npm ci
+          npm run lint --if-present
+          npm run build --if-present
+          npm test
+
+      # --- Python ---
+      - if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e ".[dev]" || pip install -e .; fi
+          pip install ruff pytest pytest-cov
+          ruff check .
+          pytest --cov --cov-report=term-missing --cov-fail-under="$COVERAGE_MIN"
+
+      # --- Java (Maven) ---
+      - if: hashFiles('pom.xml') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - if: hashFiles('pom.xml') != ''
+        run: mvn -B verify
+
+      # --- .NET ---
+      - if: hashFiles('**/*.sln', '**/*.csproj') != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - if: hashFiles('**/*.sln', '**/*.csproj') != ''
+        run: dotnet test --collect:"XPlat Code Coverage"
+
+      - name: Stack-Hinweis
+        if: hashFiles('package.json', 'pyproject.toml', 'requirements*.txt', 'pom.xml', '**/*.sln', '**/*.csproj') == ''
+        run: echo "::warning::Kein Stack erkannt – nur zulässig, solange die Setup-Stories offen sind."
