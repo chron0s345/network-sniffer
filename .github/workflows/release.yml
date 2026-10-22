@@ -18,7 +18,7 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - id: rp
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           # Mit GITHUB_TOKEN erstellte PRs lösen keine Checks aus -> Auto-Merge hinge. Daher PAT bevorzugen.
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
