@@ -20,7 +20,7 @@ jobs:
     env:
       COVERAGE_MIN: ${{ vars.COVERAGE_MIN || '80' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # --- Node.js ---
       - if: hashFiles('package.json') != ''
