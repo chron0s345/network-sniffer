@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Neue Versionen erst nach einer Karenzzeit übernehmen (Schutz vor kompromittierten Releases).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: chore
   # Der devops-engineer ergänzt hier das Ökosystem des gewählten Stacks (npm, pip, maven, nuget, ...).
