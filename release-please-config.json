@@ -5,7 +5,14 @@
       "release-type": "python",
       "package-name": "network-sniffer",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='network-sniffer')].version"
+        }
+      ]
     }
   }
 }
