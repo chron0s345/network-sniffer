@@ -56,7 +56,10 @@ Je Entscheidungsfeld die gewählte Option und die verworfenen Alternativen.
 
 ### Datenhaltung
 - **Gewählt: SQLite** (WAL-Modus, `secure_delete=ON`) über **SQLAlchemy 2**, Migrationen mit **Alembic**, die beim
-  Dienststart automatisch angewendet werden. Es werden **keine Rohpakete, keine Nutzdaten und keine .pcap-Dateien**
+  Start automatisch auf `head` gebracht werden. Die Migrationen liegen deshalb im Paket
+  (`src/network_sniffer/migrations/`), damit sie im installierten Paket und im PyInstaller-Build enthalten sind;
+  `alembic.ini` im Wurzelverzeichnis verweist für die Entwicklung darauf, die Logik der Alembic-Umgebung liegt in
+  `storage/migration_env.py`. Es werden **keine Rohpakete, keine Nutzdaten und keine .pcap-Dateien**
   gespeichert – nur maskierte Funde.
 - Verworfen: **PostgreSQL** – zusätzlicher Dienst auf einem Desktop-PC.
 - Verworfen: **JSON-Dateien** – keine Transaktionen, keine Abfragen, keine Migrationen.
@@ -122,8 +125,8 @@ Modularer Monolith in einem Prozess (im Dienst), Paket `src/network_sniffer/`:
 |---|---|---|
 | `capture/` | **Erfassung** (Live-Mitschnitt im Dauerbetrieb, austauschbare Paketquelle) | `PacketSource`-Protokoll mit `NpcapLiveSource` (Windows), `ReplaySource` (Tests/Entwicklung), `NullSource`; `InterfaceProvider` (Npcap-Geräte mit Anzeigename wie „Ethernet“/„WLAN“ und stabiler GUID `\Device\NPF_{…}`); `npcap.py` (Erkennung über `%SystemRoot%\System32\Npcap\wpcap.dll` + Scapy `conf.use_pcap`); `packets.py` (schlanker Header-Parser); `flows.py` (inkrementelle TCP-Reassemblierung, Analyse-Budget je Stream-Richtung standardmäßig 64 KiB, Flush bei FIN/RST/Idle, begrenzte Stream-Tabelle); `capture_service` mit Zustandsautomat `running \| paused \| error(Grund)`, Paket-/Drop-Zählern und Wiederanlauf alle 10 s bei Fehlern (z. B. WLAN aus, Standby). Pakete gehen über eine begrenzte Queue vom Capture-Thread an einen Worker-Thread. |
 | `detection/` | **Erkennung** (Regel-Engine) | Regeln (eingebaut und eigene), Maskierung, Fingerabdruck (HMAC-SHA256 mit `NS_SECRET_KEY`) |
-| `storage/` | **Speicherung der Funde** | SQLAlchemy-Modelle (Finding, FindingReview, Setting, RuleConfig/CustomRule, User, Session, LoginAttempt, AuditEvent), Alembic-Migrationen |
-| `security/` | Querschnitt Sicherheit | Passwörter, Sitzungen, Setup-Token, Rechtematrix, CSRF |
+| `storage/` | **Speicherung der Funde** | SQLAlchemy-Modelle (Finding, FindingReview, Setting, RuleConfig/CustomRule, User, Session, LoginAttempt, AuditEvent), `db.py` (inkl. Migration beim Start), `migration_env.py` (Alembic-Umgebung); die Migrationen selbst liegen unter `migrations/` im Paket |
+| `security/` | Querschnitt Sicherheit | `request_guard.py` (Host-Allowlist inkl. Port, Origin-Prüfung), Passwörter, Sitzungen, Setup-Token, Rechtematrix, CSRF |
 | `services/` | Anwendungsfälle | Abfrage/Filter, Bewertung, Statistik, Export, Regeln, Benutzer, Audit, Aufbewahrung |
 | `api/` | **REST-API** | FastAPI-Router, nutzen ausschließlich `services/` |
 | `web/` | **Dashboard** | Jinja2-Templates, Formulare, SVG-Diagramme, nutzen ausschließlich `services/` |
@@ -175,6 +178,10 @@ Alle automatisierten Tests laufen **ohne Administratorrechte, ohne Npcap und ohn
 - **Netzwerk:** Das Dashboard bindet **nur an `127.0.0.1`** (Port 8765). Eine spätere Freigabe ins Netz ist über
   `NS_BIND_HOST` vorgesehen; der Start verweigert aber eine Nicht-Loopback-Bindung ohne konfiguriertes
   TLS-Zertifikat (`NS_TLS_CERT`/`NS_TLS_KEY`) – nicht Teil des MVP.
+- **Schutz gegen DNS-Rebinding/Cross-Origin:** Die Loopback-Bindung allein reicht nicht. Eine Middleware
+  (`security/request_guard.py`) akzeptiert nur Host-Header aus einer Allowlist inklusive Port (`NS_ALLOWED_HOSTS`,
+  Default `127.0.0.1:<port>`, `localhost:<port>`, `<NS_BIND_HOST>:<port>`) und weist zustandsändernde Requests mit
+  fremdem `Origin` ab. Die interaktive API-Doku (`/docs`, `/redoc`, `/openapi.json`) ist abgeschaltet.
 - **Eigenverkehr:** Der eigene Dashboard-Verkehr auf Loopback wird vom Mitschnitt ausgenommen (sonst würden eigene
   Logins zu Funden).
 - **Logs:** rotierende Datei unter `%ProgramData%\network-sniffer\logs\` ohne Klartextwerte; Lebenszyklus-Ereignisse

@@ -28,3 +28,13 @@ htmlcov/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Laufzeitdaten (lokale Entwicklung)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Werkzeug-Caches
+.pytest_cache/
+.ruff_cache/

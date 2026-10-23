@@ -36,10 +36,10 @@ Jeder Befehl einzeln ausführen (kein `&&`), damit er auch in Windows PowerShell
 | Tests mit Coverage | `uv run pytest --cov=network_sniffer --cov-report=term-missing --cov-fail-under=80` |
 | Build | `uv build` |
 | Windows-Paket (nur unter Windows, ab KAN-46) | `uv run python packaging/build_windows.py` |
-| Lokal starten (Entwicklung, ohne Dienst) | `uv run network-sniffer serve` – liest `.env` (Vorlage `.env.example`; Pflicht `NS_SECRET_KEY`), `NS_CAPTURE_SOURCE=none` für Start ohne Npcap → http://127.0.0.1:8765 |
+| Lokal starten (Entwicklung, ohne Dienst) | `uv run network-sniffer serve` – liest `.env` (Vorlage `.env.example`; `NS_SECRET_KEY` erst ab KAN-15 Pflicht, bis dahin optional – falls gesetzt ≥ 32 Zeichen), `NS_CAPTURE_SOURCE=none` für Start ohne Npcap → http://127.0.0.1:8765 |
 | Ersten Admin anlegen | `uv run network-sniffer create-admin --username <name>` |
 | Dienst (Admin-PowerShell, gepacktes EXE, ab KAN-35) | `network-sniffer.exe service install`, `network-sniffer.exe service remove` |
-| Migration anlegen | `uv run alembic revision --autogenerate -m "<beschreibung>"` |
+| Migration anlegen | `uv run alembic revision --autogenerate -m "<beschreibung>"` (über `alembic.ini` → `src/network_sniffer/migrations/`) |
 
 ## Architektur
 Modularer Monolith, ein Prozess (im Dienst). Details: [ADR 0002](docs/adr/0002-tech-stack-und-architektur.md).
@@ -49,8 +49,12 @@ src/network_sniffer/
   capture/            Erfassung: PacketSource (NpcapLiveSource, ReplaySource, NullSource), InterfaceProvider,
                       npcap.py, packets.py (Header-Parser), flows.py (TCP-Reassemblierung), capture_service
   detection/          Erkennung: Regel-Engine, Maskierung, Fingerabdruck (HMAC-SHA256 mit NS_SECRET_KEY)
-  storage/            Speicherung: SQLAlchemy-Modelle
-  security/           Passwörter, Sitzungen, Setup-Token, Rechtematrix (permissions.py), CSRF
+  storage/            Speicherung: SQLAlchemy-Modelle, db.py (Engine, Sitzungen, Migration auf head beim Start),
+                      migration_env.py (Logik der Alembic-Umgebung)
+  migrations/         Alembic-Migrationen (env.py, versions/) – bewusst im Paket, damit sie im installierten Paket
+                      und im PyInstaller-Build enthalten sind
+  security/           request_guard.py (Host-/Origin-Prüfung), Passwörter, Sitzungen, Setup-Token,
+                      Rechtematrix (permissions.py), CSRF
   services/           Anwendungsfälle (Abfrage/Filter, Bewertung, Statistik, Export, Regeln, Benutzer, Audit, Aufbewahrung)
   api/                REST-API (FastAPI-Router)
   web/                Dashboard (Jinja2)
@@ -59,7 +63,7 @@ tests/
   unit/ component/ api/ web/ windows/
   pcapgen.py          erzeugt Test-Fixtures (.pcap) zur Laufzeit in tmp_path
 packaging/            PyInstaller-Build für Windows
-migrations/           Alembic-Migrationen
+alembic.ini           Alembic-Konfiguration für die Entwicklung (script_location → src/network_sniffer/migrations)
 ```
 
 Datenfluss: Npcap → `PacketSource` → Header-Parser → Reassembler → Regel-Engine → Maskierung/Fingerabdruck → SQLite →
@@ -67,6 +71,15 @@ Datenfluss: Npcap → `PacketSource` → Header-Parser → Reassembler → Regel
 
 Betrieb: Windows-Dienst als `NT SERVICE\network-sniffer`, Daten unter `%ProgramData%\network-sniffer\`, Dashboard nur
 auf `127.0.0.1:8765`.
+
+Sicherheit des lokalen Dashboards:
+- `security/request_guard.py` (`LocalRequestGuardMiddleware`) prüft jeden HTTP-/WebSocket-Request: Der Host-Header
+  muss inklusive Port in der Allowlist stehen (sonst 400 – Schutz gegen DNS-Rebinding); zustandsändernde Requests
+  (alles außer GET/HEAD/OPTIONS sowie WebSockets) mit fremdem `Origin` werden mit 403 abgewiesen.
+- Allowlist über `NS_ALLOWED_HOSTS` (JSON-Liste, z. B. `["127.0.0.1:8765"]`); Default: `127.0.0.1:<port>`,
+  `localhost:<port>` und `<NS_BIND_HOST>:<port>`.
+- `/docs`, `/redoc` und `/openapi.json` sind abgeschaltet.
+- `GET /api/health` (öffentlich) liefert `status`, `version` und `db`; bei DB-Fehler HTTP 503.
 
 ## Konventionen
 - Commits/PR-Titel: `typ(JIRA-KEY): beschreibung` (Conventional Commits)
@@ -78,5 +91,5 @@ auf `127.0.0.1:8765`.
 - Windows-spezifische Tests mit `@pytest.mark.windows` (laufen im CI-Job `windows-build`).
 - Jeder Endpunkt deklariert `require(Permission.X)` und hat Tests für erlaubte und verbotene Rolle.
 - Uhrzeit nur über `Clock`, Speicherung in UTC.
-- Jede Schemaänderung ist eine Alembic-Migration.
+- Jede Schemaänderung ist eine Alembic-Migration unter `src/network_sniffer/migrations/versions/`.
 - Testdaten nur synthetisch; secret-ähnliche Werte zur Laufzeit zusammensetzen, keine Binär-.pcap committen.
