@@ -27,8 +27,8 @@
     "releasesPageId": "688129"
   },
   "process": {
-    "currentSprint": 0,
-    "sprintGoal": "",
+    "currentSprint": 1,
+    "sprintGoal": "Lauffähiges, auf Python zugeschnittenes Grundgerüst, das bei jedem Merge über eine grüne Pipeline als getestetes Windows-Paket gebaut wird und beim Erststart sicher mit einem ersten Administrator eingerichtet werden kann.",
     "sprintCapacityPoints": 20,
     "wipLimit": 1,
     "maxReviewRounds": 3,
