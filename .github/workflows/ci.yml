@@ -38,6 +38,11 @@ jobs:
       - name: Abhängigkeiten installieren
         run: uv sync --locked --all-extras
 
+      # KAN-46/ADR 0003: Lizenzen aller Laufzeit-Distributionen gegen die Allowlist – früh, damit ein
+      # (L)GPL-Neuzugang im uv.lock-Diff sofort auffällt. Exit 1 bei Verstoß. Der Windows-Paket-Build prüft erneut.
+      - name: Lizenz-Allowlist prüfen
+        run: uv run python packaging/build_windows.py --check-licenses
+
       - name: Lint (ruff check)
         run: uv run ruff check .
 
