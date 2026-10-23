@@ -1,6 +1,5 @@
 """Dashboard-Seiten."""
 
-import os  # KAN-11 Nachweis: absichtlich ungenutzter Import
 from pathlib import Path
 
 from fastapi import APIRouter, Request
