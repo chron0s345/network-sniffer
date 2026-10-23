@@ -2,7 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "packages": {
     ".": {
-      "release-type": "simple",
+      "release-type": "python",
+      "package-name": "network-sniffer",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true
     }
