@@ -5,11 +5,12 @@
 ## Produkt
 Windows-Dienst zur defensiven Data-Leak-Erkennung im Netzwerkverkehr des eigenen PCs: Live-Mitschnitt über Npcap im
 Dauerbetrieb, Erkennung unverschlüsselt übertragener Geheimnisse über eine Regel-Engine, maskierte Funde in einem
-Web-Dashboard auf `127.0.0.1`. Mehrbenutzerbetrieb mit den Rollen Admin und Analyst. Lizenz: GPL-2.0-only.
+Web-Dashboard auf `127.0.0.1`. Mehrbenutzerbetrieb mit den Rollen Admin und Analyst. Lizenz: MIT.
 Architektur in Confluence: https://christianjanz90.atlassian.net/wiki/spaces/SOFTWAREEN/pages/622593
 
 ## Tech-Stack
-Entscheidung und verworfene Alternativen: [ADR 0002](docs/adr/0002-tech-stack-und-architektur.md).
+Entscheidung und verworfene Alternativen: [ADR 0002](docs/adr/0002-tech-stack-und-architektur.md), für Live-Mitschnitt,
+Test-Fixtures und Lizenz [ADR 0003](docs/adr/0003-scapy-ersetzen-und-permissive-lizenz.md).
 
 | Bereich | Technologie |
 |---|---|
@@ -17,7 +18,7 @@ Entscheidung und verworfene Alternativen: [ADR 0002](docs/adr/0002-tech-stack-un
 | Backend/API | FastAPI + Uvicorn, Pydantic v2, pydantic-settings (Präfix `NS_`) |
 | Dashboard | Jinja2 (Autoescape), HTML/CSS, serverseitiges SVG, kein JS-Build |
 | Datenhaltung | SQLite (WAL, `secure_delete=ON`), SQLAlchemy 2, Alembic |
-| Live-Mitschnitt | Npcap (vom Betreiber installiert) + Scapy (`L2pcapListenSocket`, `recv_raw()`, eigener Header-Parser) |
+| Live-Mitschnitt | Npcap (vom Betreiber installiert) über eigenen `ctypes`-Wrapper um `wpcap.dll` (ADR 0003), eigener Header-Parser, eigener pcap-Reader für `ReplaySource` |
 | Regeln | `regex` (mit Timeout) |
 | Auth | argon2-cffi (Argon2id), serverseitige Sitzungen |
 | Windows-Dienst | pywin32 |
@@ -42,12 +43,16 @@ Jeder Befehl einzeln ausführen (kein `&&`), damit er auch in Windows PowerShell
 | Migration anlegen | `uv run alembic revision --autogenerate -m "<beschreibung>"` (über `alembic.ini` → `src/network_sniffer/migrations/`) |
 
 ## Architektur
-Modularer Monolith, ein Prozess (im Dienst). Details: [ADR 0002](docs/adr/0002-tech-stack-und-architektur.md).
+Modularer Monolith, ein Prozess (im Dienst). Details: [ADR 0002](docs/adr/0002-tech-stack-und-architektur.md),
+Npcap-Anbindung und Fixtures: [ADR 0003](docs/adr/0003-scapy-ersetzen-und-permissive-lizenz.md).
 
 ```
 src/network_sniffer/
   capture/            Erfassung: PacketSource (NpcapLiveSource, ReplaySource, NullSource), InterfaceProvider,
-                      npcap.py, packets.py (Header-Parser), flows.py (TCP-Reassemblierung), capture_service
+                      npcap.py (sicheres Laden der System-wpcap.dll, NpcapMissing), pcap_ffi.py (ctypes-Wrapper
+                      mit expliziten argtypes/restype, Bibliothekspfad als Parameter), pcapfile.py (Reader für
+                      klassisches pcap, nur lesend), packets.py (Header-Parser), flows.py (TCP-Reassemblierung),
+                      capture_service
   detection/          Erkennung: Regel-Engine, Maskierung, Fingerabdruck (HMAC-SHA256 mit NS_SECRET_KEY)
   storage/            Speicherung: SQLAlchemy-Modelle, db.py (Engine, Sitzungen, Migration auf head beim Start),
                       migration_env.py (Logik der Alembic-Umgebung)
@@ -61,7 +66,8 @@ src/network_sniffer/
   platform/windows/   Dienstklasse (pywin32), Dienst-Installation, ACLs
 tests/
   unit/ component/ api/ web/ windows/
-  pcapgen.py          erzeugt Test-Fixtures (.pcap) zur Laufzeit in tmp_path
+  pcapgen.py          eigener Paketbau (ether/ipv4/ipv6/tcp/udp/vlan, Prüfsummen) + pcap-Writer (write_pcap),
+                      Szenarien tcp_session/http_request; erzeugt Fixtures zur Laufzeit in tmp_path
 packaging/            PyInstaller-Build für Windows
 alembic.ini           Alembic-Konfiguration für die Entwicklung (script_location → src/network_sniffer/migrations)
 ```
@@ -86,10 +92,14 @@ Sicherheit des lokalen Dashboards:
 - Branches: `feature/<KEY>-<slug>`, `fix/<KEY>-<slug>`
 - Tests benennen das Akzeptanzkriterium, das sie prüfen (`test_ac1_...`, `test_ac2_...`)
 - Keine Rohpakete oder Nutzdaten persistieren oder loggen – nur Ergebnisse von `masking` + `fingerprint`.
-- Paketquelle immer über `PacketSource` – nie direkt Npcap/Scapy in der Fachlogik.
-- Plattformspezifischer Code nur unter `platform/windows/` und über Fakes testbar.
+- Paketquelle immer über `PacketSource` – nie direkt Npcap/`ctypes` in der Fachlogik; FFI-Code nur in
+  `capture/pcap_ffi.py`/`capture/npcap.py`, jede Funktion mit expliziten `argtypes`/`restype`.
+- Plattformspezifischer Code nur unter `platform/windows/` (Ausnahme: Npcap-Anbindung in `capture/`) und über Fakes testbar.
 - Windows-spezifische Tests mit `@pytest.mark.windows` (laufen im CI-Job `windows-build`).
 - Jeder Endpunkt deklariert `require(Permission.X)` und hat Tests für erlaubte und verbotene Rolle.
 - Uhrzeit nur über `Clock`, Speicherung in UTC.
 - Jede Schemaänderung ist eine Alembic-Migration unter `src/network_sniffer/migrations/versions/`.
 - Testdaten nur synthetisch; secret-ähnliche Werte zur Laufzeit zusammensetzen, keine Binär-.pcap committen.
+- Lizenzen (ADR 0003): keine (L)GPL-/AGPL-Laufzeitabhängigkeiten. Jede neue Abhängigkeit – auch transitive im
+  `uv.lock`-Diff – braucht eine Lizenzprüfung (PyPI-Metadaten, Allowlist: MIT, MIT-0, BSD-2/3-Clause, Apache-2.0,
+  PSF-2.0, ISC, CNRI-Python); Ergebnis im PR nennen. Ausnahmen nur per ADR.

@@ -3,7 +3,7 @@ name = "network-sniffer"
 version = "0.0.0"
 description = "Defensive Data-Leak-Erkennung im Netzwerkverkehr des eigenen Windows-PCs"
 readme = "README.md"
-license = "GPL-2.0-only"
+license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [

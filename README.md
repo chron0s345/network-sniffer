@@ -19,10 +19,13 @@ mit den nächsten Stories; ein installierbares Windows-Paket mit KAN-46.
 
 ## Architektur
 - [ADR 0002 – Tech-Stack und Architektur](docs/adr/0002-tech-stack-und-architektur.md): Python 3.12, FastAPI,
-  Jinja2-Dashboard, SQLite, Npcap + Scapy, pywin32-Dienst, PyInstaller-Paket – inkl. verworfener Alternativen.
+  Jinja2-Dashboard, SQLite, Npcap, pywin32-Dienst, PyInstaller-Paket – inkl. verworfener Alternativen.
+- [ADR 0003 – Scapy ersetzen und permissive Lizenz](docs/adr/0003-scapy-ersetzen-und-permissive-lizenz.md):
+  Npcap-Anbindung über einen eigenen `ctypes`-Wrapper, eigener pcap-Reader und Fixture-Generator, Lizenz MIT.
 - Alle Entscheidungen: [docs/adr](docs/adr)
   - [0001 – Architekturentscheidungen als ADRs dokumentieren](docs/adr/0001-architekturentscheidungen-dokumentieren.md)
   - [0002 – Tech-Stack und Architektur](docs/adr/0002-tech-stack-und-architektur.md)
+  - [0003 – Scapy ersetzen und permissive Lizenz](docs/adr/0003-scapy-ersetzen-und-permissive-lizenz.md)
 
 ## Entwicklung
 Siehe [CLAUDE.md](CLAUDE.md) für Stack, Befehle und Konventionen.
@@ -63,4 +66,5 @@ Alle Einstellungen kommen aus Umgebungsvariablen mit Präfix `NS_`, aus `.env` i
 Versionierung nach [SemVer](https://semver.org/lang/de/), Änderungen in [CHANGELOG.md](CHANGELOG.md).
 
 ## Lizenz
-Lizenz: GPL-2.0-only (siehe [LICENSE](LICENSE))
+Lizenz: MIT (siehe [LICENSE](LICENSE)). Drittlizenzen der gebündelten Komponenten: `THIRD-PARTY-LICENSES.txt` im
+Windows-Paket. Npcap ist nicht enthalten und unterliegt der Npcap-Lizenz.
