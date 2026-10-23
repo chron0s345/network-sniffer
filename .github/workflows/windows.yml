@@ -1,0 +1,52 @@
+name: windows
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job-Name wird nach KAN-11 zusätzlicher Required Check der Branch-Protection – nicht umbenennen.
+  # Gleiche Schritte wie `build-test` (ci.yml), aber auf Windows (Zielplattform): prüft Windows-Pfade,
+  # Zeilenenden, Zeitzonen und die Tests mit @pytest.mark.windows. Läuft in PowerShell (Default-Shell).
+  # KAN-46 ergänzt Paket-Build und Smoke-Test, KAN-35 den Dienst-Installationstest.
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # Mindest-Coverage aus der Repo-Variable; nie senken.
+      COVERAGE_MIN: ${{ vars.COVERAGE_MIN || '80' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: uv und Python 3.12 einrichten
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.0'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Abhängigkeiten installieren
+        run: uv sync --locked --all-extras
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format prüfen (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Tests mit Coverage
+        run: uv run pytest --cov=network_sniffer --cov-report=term-missing --cov-report=xml --cov-fail-under="$env:COVERAGE_MIN"
+
+      - name: Build
+        run: uv build
