@@ -22,6 +22,8 @@ coverage/
 .coverage
 htmlcov/
 *.lcov
+coverage.xml
+sbom.cdx.json
 
 # Editor/OS
 .idea/

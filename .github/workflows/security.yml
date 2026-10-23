@@ -35,11 +35,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Trivy >= 0.59.0 liest uv.lock (Changelog 0.59.0: "python: add support for uv", #8080);
+      # 0.58.1 war für Python blind. Image per Digest gepinnt (Schutz vor umgetaggten Images).
+      # --include-dev-deps: auch Dev-/Optional-Abhängigkeiten (laufen in der CI) werden geprüft.
       - name: Trivy (Abhängigkeiten & Fehlkonfigurationen)
+        env:
+          TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:9db099105405c648166e6b94155eb32f8da12673cf1f455207f7385cc9a77283
         run: |
-          docker run --rm -v "$PWD:/src" -w /src aquasec/trivy:0.58.1 fs \
+          docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache/trivy -w /src "$TRIVY_IMAGE" fs \
             --scanners vuln,misconfig \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
+            --include-dev-deps \
+            --skip-version-check \
             --exit-code 1 \
             .
+      # Nachweis, dass der Scan die gelockten Python-Pakete sieht: SBOM aus demselben Scanner,
+      # der Job schlägt fehl, wenn aus uv.lock keine Pakete erkannt werden (Schutz gegen erneute Blindheit).
+      - name: Nachweis – Python-Pakete aus uv.lock erkannt
+        env:
+          TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:9db099105405c648166e6b94155eb32f8da12673cf1f455207f7385cc9a77283
+        run: |
+          docker run --rm -v "$PWD:/src" -v trivy-cache:/root/.cache/trivy -w /src "$TRIVY_IMAGE" fs \
+            --format cyclonedx \
+            --include-dev-deps \
+            --skip-version-check \
+            --output /src/sbom.cdx.json \
+            .
+          found=$(jq '[.components[]? | select((.purl // "") | startswith("pkg:pypi/"))] | length' sbom.cdx.json)
+          locked=$(grep -c '^\[\[package\]\]' uv.lock)
+          echo "Pakete in uv.lock: $locked – von Trivy erkannte PyPI-Pakete: $found"
+          jq -r '.components[]? | select((.purl // "") | startswith("pkg:pypi/")) | .purl' sbom.cdx.json | sort
+          if [ "$found" -eq 0 ]; then
+            echo "::error::Trivy hat keine Python-Pakete aus uv.lock erkannt – der dependencies-Scan wäre blind."
+            exit 1
+          fi
