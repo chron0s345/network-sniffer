@@ -1,6 +1,6 @@
 # 0002. Tech-Stack und Architektur
 
-- **Status:** akzeptiert (Accepted)
+- **Status:** akzeptiert (Accepted); teilweise ersetzt durch [ADR 0003](0003-scapy-ersetzen-und-permissive-lizenz.md) (Live-Mitschnitt, Test-Fixtures, Lizenz)
 - **Datum:** 2026-10-23
 - **Ticket:** KAN-10
 
@@ -39,6 +39,9 @@ Je Entscheidungsfeld die gewählte Option und die verworfenen Alternativen.
 - Verworfen: **vendored JS-Bibliotheken** – werden nicht von den Dependency-Scannern überwacht.
 
 ### Live-Mitschnitt unter Windows
+
+> Ersetzt durch ADR 0003.
+
 - **Gewählt: Npcap über Scapy.** Npcap wird vom Betreiber separat installiert (wie für Wireshark). Scapy dient nur als
   Zugriffsschicht: `L2pcapListenSocket`, Lesen per `recv_raw()` – **ohne** Scapy-Dissektion. Das Header-Parsing
   übernimmt ein eigener schlanker `struct`-Parser für Ethernet, Loopback (DLT_NULL), IPv4, IPv6, TCP und UDP, um den
@@ -50,6 +53,9 @@ Je Entscheidungsfeld die gewählte Option und die verworfenen Alternativen.
 - Verworfen: **Raw-Sockets (`SIO_RCVALL`)** – Admin-Pflicht, unvollständige Sicht auf den Verkehr.
 
 ### Test-Fixtures und Test-Paketquelle
+
+> Ersetzt durch ADR 0003.
+
 - **Gewählt:** Fixtures werden in den Tests mit Scapy erzeugt (`tests/pcapgen.py`, `wrpcap` in `tmp_path`) und über
   `ReplaySource` (Scapy `RawPcapReader`) in **dieselbe** Pipeline eingespielt wie Live-Pakete.
 - Verworfen: **committete Binär-.pcap-Dateien** – nicht reviewbar, Probleme mit Secret-Scannern.
@@ -108,10 +114,15 @@ Je Entscheidungsfeld die gewählte Option und die verworfenen Alternativen.
 - Verworfen: **pip ohne Lock** – nicht reproduzierbar, nicht scanbar.
 
 ### Lizenz
+
+> Ersetzt durch ADR 0003.
+
 - **Gewählt: GPL-2.0-only** (vom Menschen bestätigt), weil Scapy unter GPL-2.0 steht und im ausgelieferten EXE
   enthalten ist. Volltext in `LICENSE`; ab KAN-12 zusätzlich `license = "GPL-2.0-only"` in `pyproject.toml`.
 
 ## Entscheidung
+> Scapy-Bezüge in diesem Abschnitt: ersetzt durch ADR 0003.
+
 Wir wählen den oben jeweils als „Gewählt“ markierten Stack: **Python 3.12 mit FastAPI/Uvicorn, Jinja2-Dashboard,
 SQLite über SQLAlchemy 2 + Alembic, Live-Mitschnitt über Npcap + Scapy (ohne Dissektion), pywin32-Dienst,
 PyInstaller-onedir-Paket, pytest/pytest-cov/Ruff, uv**, weil er durchgängig in einer Sprache entwickelt und getestet
@@ -119,6 +130,8 @@ werden kann, die Test-Fixtures mit demselben Werkzeug erzeugt werden wie der Mit
 Fabrik-Scannern erfasst werden und keine zusätzlichen Dienste auf dem PC des Betreibers nötig sind.
 
 ### Architektur
+> Scapy-Bezüge in diesem Abschnitt: ersetzt durch ADR 0003.
+
 Modularer Monolith in einem Prozess (im Dienst), Paket `src/network_sniffer/`:
 
 | Modul | Rolle | Inhalt |
@@ -147,6 +160,8 @@ Der `capture_service` liest aus der konfigurierten `PacketSource`, parst die Hea
 existiert nur flüchtig im Arbeitsspeicher.**
 
 ### Teststrategie
+> Scapy-Bezüge in diesem Abschnitt: ersetzt durch ADR 0003.
+
 Alle automatisierten Tests laufen **ohne Administratorrechte, ohne Npcap und ohne Live-Traffic**:
 
 - **Test-Paketquelle:** Fixtures werden zur Testlaufzeit mit `tests/pcapgen.py` (Scapy, `wrpcap` in `tmp_path`)
@@ -197,6 +212,8 @@ Alle automatisierten Tests laufen **ohne Administratorrechte, ohne Npcap und ohn
 - **`windows-build`** wird nach KAN-11 **zusätzlicher Required Check**.
 
 ## Konsequenzen
+> Scapy-Bezüge in diesem Abschnitt: ersetzt durch ADR 0003.
+
 - **Durchsatz** ist in Python begrenzt. Ziel ≥ 20 000 Pakete/s (Messung in KAN-13); darüber hinaus werden Pakete
   gezählt verworfen (Drop-Zähler im Dashboard).
 - Analysiert werden nur die **ersten 64 KiB je Stream-Richtung**; Secrets in sehr großen Bodies können entgehen.
