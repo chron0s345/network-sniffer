@@ -49,7 +49,8 @@ Alle Einstellungen kommen aus Umgebungsvariablen mit Präfix `NS_`, aus `.env` i
 | `NS_DATA_DIR` | Windows `%ProgramData%\network-sniffer`, sonst `./data` | Datenverzeichnis (SQLite-DB) |
 | `NS_BIND_HOST` | `127.0.0.1` | Bind-Adresse; Nicht-Loopback wird ohne `NS_TLS_CERT`/`NS_TLS_KEY` verweigert |
 | `NS_PORT` | `8765` | Port |
-| `NS_ALLOWED_HOSTS` | `["127.0.0.1:<port>", "localhost:<port>"]` | Erlaubte Host-Header (JSON-Liste), Schutz vor DNS-Rebinding |
+| `NS_ALLOWED_HOSTS` | `127.0.0.1:<port>`, `localhost:<port>` und `<NS_BIND_HOST>:<port>` | Erlaubte Host-Header (JSON-Liste, ersetzt den Standard), Schutz vor DNS-Rebinding |
+| `NS_TLS_CERT`, `NS_TLS_KEY` | – | Zertifikat und Schlüssel (nur gemeinsam); werden an Uvicorn übergeben, fehlende Dateien verhindern den Start |
 | `NS_CAPTURE_SOURCE` | `npcap` | Paketquelle `npcap`, `replay` oder `none` (ab KAN-13) |
 | `NS_SECRET_KEY` | – | Ab KAN-15 Pflicht; wenn gesetzt, mindestens 32 Zeichen |
 

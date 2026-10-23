@@ -68,6 +68,82 @@ def test_serve_reports_field_errors_with_variable_name(
     assert "NS_PORT" in capsys.readouterr().err
 
 
+def _tls_files(tmp_path: Path) -> tuple[Path, Path]:
+    # Inhalt egal: uvicorn ist gemockt, geprüft wird nur Existenz und Weitergabe.
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    cert.write_text("synthetic-cert", encoding="utf-8")
+    key.write_text("synthetic-key", encoding="utf-8")
+    return cert, key
+
+
+def test_serve_passes_tls_files_to_uvicorn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, uvicorn_calls: list[dict[str, Any]]
+) -> None:
+    cert, key = _tls_files(tmp_path)
+    monkeypatch.setenv("NS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("NS_BIND_HOST", "0.0.0.0")
+    monkeypatch.setenv("NS_TLS_CERT", str(cert))
+    monkeypatch.setenv("NS_TLS_KEY", str(key))
+
+    assert __main__.main(["serve"]) == 0
+
+    (call,) = uvicorn_calls
+    assert call["host"] == "0.0.0.0"
+    assert call["ssl_certfile"] == str(cert)
+    assert call["ssl_keyfile"] == str(key)
+
+
+def test_serve_without_tls_passes_no_ssl_arguments(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, uvicorn_calls: list[dict[str, Any]]
+) -> None:
+    monkeypatch.setenv("NS_DATA_DIR", str(tmp_path))
+
+    assert __main__.main(["serve"]) == 0
+
+    (call,) = uvicorn_calls
+    assert "ssl_certfile" not in call
+    assert "ssl_keyfile" not in call
+
+
+@pytest.mark.parametrize("missing", ["NS_TLS_CERT", "NS_TLS_KEY"])
+def test_serve_refuses_missing_tls_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    uvicorn_calls: list[dict[str, Any]],
+    missing: str,
+) -> None:
+    cert, key = _tls_files(tmp_path)
+    monkeypatch.setenv("NS_BIND_HOST", "0.0.0.0")
+    monkeypatch.setenv("NS_TLS_CERT", str(cert))
+    monkeypatch.setenv("NS_TLS_KEY", str(key))
+    monkeypatch.setenv(missing, str(tmp_path / "does-not-exist.pem"))
+
+    assert __main__.main(["serve"]) == 2
+
+    assert uvicorn_calls == []
+    err = capsys.readouterr().err
+    assert "Konfigurationsfehler" in err
+    assert f"{missing}: Datei" in err
+
+
+@pytest.mark.parametrize("only", ["NS_TLS_CERT", "NS_TLS_KEY"])
+def test_serve_refuses_only_one_tls_setting_on_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    uvicorn_calls: list[dict[str, Any]],
+    only: str,
+) -> None:
+    cert, _key = _tls_files(tmp_path)
+    monkeypatch.setenv(only, str(cert))
+
+    assert __main__.main(["serve"]) == 2
+
+    assert uvicorn_calls == []
+    assert "gemeinsam gesetzt" in capsys.readouterr().err
+
+
 def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as excinfo:
         __main__.main(["--version"])

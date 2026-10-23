@@ -5,17 +5,15 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from jinja2 import Environment, FileSystemLoader
 
 from network_sniffer import __version__
 
 WEB_DIR = Path(__file__).parent
 STATIC_DIR = WEB_DIR / "static"
 
-# Autoescape explizit aktiv (Schutz vor XSS in allen Templates).
-templates = Jinja2Templates(
-    env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
-)
+# Starlette erzeugt die Umgebung mit jinja2.select_autoescape(): Autoescape ist für .html/.htm/.xml
+# aktiv (Schutz vor XSS). Ein Regressionstest in tests/web/test_index.py sichert das ab.
+templates = Jinja2Templates(directory=WEB_DIR / "templates")
 
 router = APIRouter()
 

@@ -154,6 +154,23 @@ def test_load_settings_reads_service_env_file_in_data_dir(
     assert settings.data_dir == data_dir
 
 
+def test_load_settings_dotenv_wins_over_service_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_dir = tmp_path / "programdata"
+    data_dir.mkdir()
+    (data_dir / "network-sniffer.env").write_text(
+        "NS_PORT=8799\nNS_CAPTURE_SOURCE=replay\n", encoding="utf-8"
+    )
+    Path(".env").write_text("NS_PORT=8766\n", encoding="utf-8")
+    monkeypatch.setenv("NS_DATA_DIR", str(data_dir))
+
+    settings = load_settings()
+
+    assert settings.port == 8766  # aus .env
+    assert settings.capture_source == "replay"  # nur in network-sniffer.env gesetzt
+
+
 def test_load_settings_environment_wins_over_service_env_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

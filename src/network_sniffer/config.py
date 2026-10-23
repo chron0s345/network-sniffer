@@ -14,6 +14,10 @@ SERVICE_ENV_FILE_NAME = "network-sniffer.env"
 SECRET_KEY_MIN_LENGTH = 32
 
 
+class ConfigurationError(ValueError):
+    """Konfiguration ist formal gültig, aber beim Start nicht verwendbar (z. B. fehlende Datei)."""
+
+
 def default_data_dir() -> Path:
     """Windows: ``%ProgramData%\\network-sniffer``, sonst ``./data``."""
     if sys.platform == "win32":
@@ -81,6 +85,20 @@ class Settings(BaseSettings):
                 "ist nur mit NS_TLS_CERT und NS_TLS_KEY erlaubt - Start verweigert."
             )
         return self
+
+    def tls_options(self) -> dict[str, str]:
+        """Argumente ``ssl_certfile``/``ssl_keyfile`` für Uvicorn; leer, wenn kein TLS konfiguriert.
+
+        Prüfung erst beim Start (nicht bei der Validierung): Dann müssen die Dateien existieren.
+        """
+        if self.tls_cert is None and self.tls_key is None:
+            return {}
+        if self.tls_cert is None or self.tls_key is None:
+            raise ConfigurationError("NS_TLS_CERT und NS_TLS_KEY müssen gemeinsam gesetzt sein")
+        for name, path in (("NS_TLS_CERT", self.tls_cert), ("NS_TLS_KEY", self.tls_key)):
+            if not path.is_file():
+                raise ConfigurationError(f"{name}: Datei {path} existiert nicht")
+        return {"ssl_certfile": str(self.tls_cert), "ssl_keyfile": str(self.tls_key)}
 
     @property
     def effective_allowed_hosts(self) -> frozenset[str]:
