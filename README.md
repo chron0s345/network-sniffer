@@ -10,3 +10,6 @@ Siehe [CLAUDE.md](CLAUDE.md) für Befehle und Konventionen und [docs/adr](docs/a
 
 ## Releases
 Versionierung nach [SemVer](https://semver.org/lang/de/), Änderungen in [CHANGELOG.md](CHANGELOG.md).
+
+## Lizenz
+Lizenz: GPL-2.0-only (siehe [LICENSE](LICENSE))
