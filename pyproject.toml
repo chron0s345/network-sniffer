@@ -1,6 +1,6 @@
 [project]
 name = "network-sniffer"
-version = "0.0.0"
+version = "0.1.0"
 description = "Defensive Data-Leak-Erkennung im Netzwerkverkehr des eigenen Windows-PCs"
 readme = "README.md"
 license = "MIT"
