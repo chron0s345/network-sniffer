@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Ersteinrichtung abgeschlossen - network-sniffer{% endblock %}
+{% block content %}
+  <h1>Ersteinrichtung abgeschlossen</h1>
+  <p>Der Administrator <strong>{{ username }}</strong> wurde angelegt. Das Setup-Token ist jetzt ungültig.</p>
+  <p><a href="{{ login_path }}">Weiter zur Anmeldung</a></p>
+{% endblock %}

@@ -58,11 +58,14 @@ src/network_sniffer/
                       migration_env.py (Logik der Alembic-Umgebung)
   migrations/         Alembic-Migrationen (env.py, versions/) – bewusst im Paket, damit sie im installierten Paket
                       und im PyInstaller-Build enthalten sind
-  security/           request_guard.py (Host-/Origin-Prüfung), Passwörter, Sitzungen, Setup-Token,
-                      Rechtematrix (permissions.py), CSRF
-  services/           Anwendungsfälle (Abfrage/Filter, Bewertung, Statistik, Export, Regeln, Benutzer, Audit, Aufbewahrung)
-  api/                REST-API (FastAPI-Router)
-  web/                Dashboard (Jinja2)
+  security/           request_guard.py (Host-/Origin-Prüfung), passwords.py (Argon2id, Passwort-Richtlinie),
+                      setup.py (Setup-Token, SetupState, SetupGateMiddleware), csrf.py (signiertes
+                      Double-Submit-Cookie); geplant: Sitzungen, Rechtematrix (permissions.py)
+  services/           Anwendungsfälle; users.py (Benutzername-Prüfung, atomare Anlage des ersten Admins);
+                      geplant: Abfrage/Filter, Bewertung, Statistik, Export, Regeln, Audit, Aufbewahrung
+  api/                REST-API (FastAPI-Router): health.py, setup.py (POST /api/setup, gemeinsamer Ablauf run_setup)
+  web/                Dashboard (Jinja2): routes.py, setup_pages.py (GET/POST /setup, Formular ohne python-multipart)
+  clock.py            Clock-Protokoll + SystemClock (UTC) – einzige Quelle für die Uhrzeit
   platform/windows/   Dienstklasse (pywin32), Dienst-Installation, ACLs
 tests/
   unit/ component/ api/ web/ windows/
@@ -86,6 +89,31 @@ Sicherheit des lokalen Dashboards:
   `localhost:<port>` und `<NS_BIND_HOST>:<port>`.
 - `/docs`, `/redoc` und `/openapi.json` sind abgeschaltet.
 - `GET /api/health` (öffentlich) liefert `status`, `version` und `db`; bei DB-Fehler HTTP 503.
+- **Setup-Gate** (`security/setup.py`, `SetupGateMiddleware`, läuft nach der Host-/Origin-Prüfung): Solange kein
+  Benutzer existiert, werden Seiten mit 303 auf `/setup` umgeleitet, übrige `/api/*`-Requests mit 503 beantwortet und
+  WebSockets mit Code 1008 geschlossen. Ausnahmen: `/setup`, `/api/setup`, `/api/health`, `/static/`. Nach der
+  Ersteinrichtung merkt sich `SetupState` den Abschluss (keine DB-Abfrage je Request mehr); `/setup` leitet dann auf
+  `/login` um, `POST /api/setup` liefert 404.
+- **Setup-Token-Lebenszyklus:** 256 Bit Zufall (`secrets.token_urlsafe(32)`), nur beim Start erzeugt, solange kein
+  Benutzer existiert; im Speicher liegt nur der SHA-256-Hash (Vergleich in konstanter Zeit). Gültig für
+  `NS_SETUP_TOKEN_TTL_MINUTES` (Standard 60, 1–1440), danach neues Token nur per Neustart. Einmalig: nach Anlage des
+  ersten Benutzers (Seite, API oder CLI – auch bei laufendem Server) wird es verworfen. Der Klartext wird genau
+  einmal als WARNING ins Server-Log/auf die Konsole geschrieben (`main.log_setup_token`) – die **einzige bewusste
+  Ausnahme** von „keine Secrets im Log“ (ADR 0002, Nachtrag KAN-37), nie ins Windows-Ereignisprotokoll. Empfohlener
+  Weg ist die CLI `network-sniffer create-admin`, die ohne Token auskommt.
+- **Erster Admin atomar:** `services/users.create_initial_admin` prüft und legt in **einem**
+  `INSERT … SELECT … WHERE NOT EXISTS` an – von parallelen Setups (Web, API, CLI, auch prozessübergreifend) gewinnt
+  genau eines.
+- **CSRF** (`security/csrf.py`): signiertes Double-Submit-Cookie `ns_csrf` (`HttpOnly`, `SameSite=Strict`, `Secure`
+  bei HTTPS) plus verstecktes Feld `csrf_token`; Cookie und Feld müssen übereinstimmen und die HMAC-SHA256-Signatur
+  gültig sein. Schlüssel aus `NS_SECRET_KEY` abgeleitet (Tokens überleben Neustarts), sonst prozesslokal zufällig
+  (Tokens werden mit dem Neustart ungültig). Jedes neue Formular nutzt `CsrfProtection` aus `app.state.csrf`.
+- **Genau ein Uvicorn-Worker:** Setup-Token, `SetupState` und (ohne `NS_SECRET_KEY`) der CSRF-Schlüssel sind
+  prozesslokal; `serve` startet deshalb mit `workers=1`. Mehrere Worker oder Prozesse hinter einem Port sind nicht
+  unterstützt.
+- Weitere `NS_`-Variablen: `NS_SETUP_TOKEN_TTL_MINUTES` (s. o.), `NS_ARGON2_TIME_COST` (Standard 3),
+  `NS_ARGON2_MEMORY_COST_KIB` (Standard 65536, mindestens 8 × Parallelität), `NS_ARGON2_PARALLELISM` (Standard 4);
+  Tests setzen die Argon2-Kosten niedrig.
 
 ## Konventionen
 - Commits/PR-Titel: `typ(JIRA-KEY): beschreibung` (Conventional Commits)
@@ -97,7 +125,8 @@ Sicherheit des lokalen Dashboards:
 - Plattformspezifischer Code nur unter `platform/windows/` (Ausnahme: Npcap-Anbindung in `capture/`) und über Fakes testbar.
 - Windows-spezifische Tests mit `@pytest.mark.windows` (laufen im CI-Job `windows-build`).
 - Jeder Endpunkt deklariert `require(Permission.X)` und hat Tests für erlaubte und verbotene Rolle.
-- Uhrzeit nur über `Clock`, Speicherung in UTC.
+- Uhrzeit nur über `Clock` (`network_sniffer/clock.py`, in der App `app.state.clock`), nie `datetime.now()` direkt;
+  Speicherung in UTC. Tests stellen die Uhr mit time-machine oder übergeben eine Fake-`Clock`.
 - Jede Schemaänderung ist eine Alembic-Migration unter `src/network_sniffer/migrations/versions/`.
 - Testdaten nur synthetisch; secret-ähnliche Werte zur Laufzeit zusammensetzen, keine Binär-.pcap committen.
 - Lizenzen (ADR 0003): keine (L)GPL-/AGPL-Laufzeitabhängigkeiten. Jede neue Abhängigkeit – auch transitive im

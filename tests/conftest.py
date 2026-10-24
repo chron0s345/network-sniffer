@@ -26,10 +26,40 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(_env_file=None, data_dir=tmp_path / "data", capture_source="none")
+    return Settings(
+        _env_file=None,
+        data_dir=tmp_path / "data",
+        capture_source="none",
+        # Argon2 in Tests billig halten (Produktion: RFC-9106-Standardwerte).
+        argon2_time_cost=1,
+        argon2_memory_cost_kib=8,
+        argon2_parallelism=1,
+    )
 
 
 @pytest.fixture
 def client(settings: Settings) -> Iterator[TestClient]:
     with TestClient(create_app(settings), base_url=BASE_URL) as test_client:
         yield test_client
+
+
+def synthetic_password(length: int = 16) -> str:
+    """Synthetisches Testpasswort, zur Laufzeit zusammengesetzt (kein Literal im Code)."""
+    return ("pw-" + "x1" * length)[:length]
+
+
+@pytest.fixture
+def admin_client(client: TestClient) -> TestClient:
+    """TestClient nach abgeschlossener Ersteinrichtung (ein Admin existiert)."""
+    from network_sniffer.services.users import create_initial_admin
+
+    state = client.app.state
+    with state.session_factory() as session:
+        create_initial_admin(
+            session,
+            username="admin-test",
+            password=synthetic_password(),
+            passwords=state.passwords,
+            clock=state.clock,
+        )
+    return client

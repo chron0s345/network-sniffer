@@ -10,7 +10,11 @@
     4. network-sniffer.exe serve mit NS_CAPTURE_SOURCE=none, temporärem NS_DATA_DIR und zufälligem
        NS_SECRET_KEY starten, GET /api/health mit Retry (Standard 30 s): HTTP 200, status ok,
        Version, db ok
-    5. Prozess beenden, temporäres Verzeichnis entfernen
+    5. Ersteinrichtung (KAN-37): ohne Benutzer leitet / auf /setup um (303), /setup (Template) und
+       /static/style.css liefern 200; network-sniffer.exe create-admin --password-stdin legt einen
+       Admin an (prüft Argon2 im Paket), ein zweiter Aufruf scheitert; danach / -> 200 und
+       /setup -> Redirect auf /login
+    6. Prozess beenden, temporäres Verzeichnis entfernen
     Exit-Code 0 bei Erfolg, 1 bei jedem Fehler.
 
 .EXAMPLE
@@ -30,6 +34,46 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'  # Expand-Archive/Invoke-WebRequest in PS 5.1 deutlich schneller
 
 function Write-Step([string]$Message) { Write-Host "[smoke] $Message" }
+
+# GET ohne Redirect-Verfolgung; liefert Status und Location (PS 5.1 und 7 einheitlich, auch für 3xx).
+function Get-HttpStatus([string]$Url) {
+    $request = [Net.HttpWebRequest]::Create($Url)
+    $request.AllowAutoRedirect = $false
+    $request.Timeout = 5000
+    try {
+        $response = $request.GetResponse()
+    } catch [Net.WebException] {
+        $response = $_.Exception.Response
+        if ($null -eq $response) { throw }
+    }
+    try {
+        return [pscustomobject]@{ Status = [int]$response.StatusCode; Location = $response.Headers['Location'] }
+    } finally {
+        $response.Close()
+    }
+}
+
+# create-admin mit Passwort über stdin. stderr wird mitgelesen; in PS 5.1 würde 2>&1 bei einem
+# nativen Programm mit ErrorActionPreference=Stop sonst sofort eine Ausnahme auslösen.
+function Invoke-CreateAdmin([string]$Exe, [string]$Username, [string]$Secret) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = ($Secret | & $Exe create-admin --username $Username --password-stdin 2>&1 |
+            ForEach-Object { "$_" } | Out-String).Trim()
+        return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+function Assert-HttpStatus([string]$Path, [int]$Status, [string]$Location) {
+    $result = Get-HttpStatus "http://127.0.0.1:$Port$Path"
+    if ($result.Status -ne $Status) { throw "GET $Path lieferte HTTP $($result.Status), erwartet $Status" }
+    if ($Location -and $result.Location -ne $Location) {
+        throw "GET $Path leitet auf '$($result.Location)' um, erwartet '$Location'"
+    }
+}
 
 $zip = (Resolve-Path -LiteralPath $ZipPath).Path
 $zipName = Split-Path -Leaf $zip
@@ -120,12 +164,28 @@ try {
     if ($health.version -ne $ExpectedVersion) { throw "version ist '$($health.version)', erwartet '$ExpectedVersion'" }
     if ($health.db -ne 'ok') { throw "db ist '$($health.db)', erwartet 'ok'" }
 
-    # Templates und statische Dateien müssen im Paket enthalten sein.
-    foreach ($path in '/', '/static/style.css') {
-        $page = Invoke-WebRequest -Uri "http://127.0.0.1:$Port$path" -UseBasicParsing -TimeoutSec 5
-        if ($page.StatusCode -ne 200) { throw "GET $path lieferte HTTP $($page.StatusCode)" }
-    }
-    Write-Step 'Dashboard-Startseite und statische Dateien ok'
+    # KAN-37: Ohne Benutzer leitet das Dashboard auf die Setup-Seite um. Templates und statische
+    # Dateien müssen im Paket enthalten sein.
+    Assert-HttpStatus -Path '/' -Status 303 -Location '/setup'
+    Assert-HttpStatus -Path '/setup' -Status 200
+    Assert-HttpStatus -Path '/static/style.css' -Status 200
+    Write-Step 'Ohne Benutzer: / -> /setup, Setup-Seite und statische Dateien ok'
+
+    # Ersten Admin per CLI anlegen (Passwort zufällig, nur über stdin, wird nirgends ausgegeben).
+    $pwBytes = New-Object byte[] 18
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($pwBytes) } finally { $rng.Dispose() }
+    $adminSecret = [Convert]::ToBase64String($pwBytes)
+    $first = Invoke-CreateAdmin -Exe $exe -Username 'smoke-admin' -Secret $adminSecret
+    if ($first.ExitCode -ne 0) { throw "create-admin beendet mit Exit-Code $($first.ExitCode): $($first.Output)" }
+    Write-Step "create-admin: $($first.Output)"
+    $second = Invoke-CreateAdmin -Exe $exe -Username 'zweiter' -Secret $adminSecret
+    if ($second.ExitCode -eq 0) { throw 'create-admin legte einen zweiten Admin an (erwartet Exit-Code <> 0)' }
+    Write-Step "zweites create-admin abgewiesen (Exit-Code $($second.ExitCode)): $($second.Output)"
+
+    Assert-HttpStatus -Path '/' -Status 200
+    Assert-HttpStatus -Path '/setup' -Status 303 -Location '/login'
+    Write-Step 'Nach der Ersteinrichtung: Startseite 200, /setup -> /login'
 
     Write-Step 'Smoke-Test erfolgreich'
     $exitCode = 0
