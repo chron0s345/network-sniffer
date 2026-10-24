@@ -31,6 +31,12 @@ def log_setup_token(token: str, tokens: SetupTokenManager) -> None:
     Steht nur im Server-Log bzw. auf der Konsole, nie im Windows-Ereignisprotokoll.
     """
     expires = tokens.expires_at.strftime("%Y-%m-%d %H:%M UTC") if tokens.expires_at else "-"
+    # Bewusste Ausnahme von der Semgrep-Regel
+    # python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure:
+    # Das einmalige, kurzlebige Setup-Token muss dem Betreiber angezeigt werden (KAN-37, README
+    # "Erststart"). Unten steht die Kurz-ID, weil die volle ID mit "nosemgrep:" über 100 Zeichen
+    # läge; Semgrep vergleicht per Suffix, andere Regeln bleiben aktiv (lokal geprüft).
+    # nosemgrep: python-logger-credential-disclosure
     logger.warning(
         "SETUP-TOKEN (einmalig, gültig bis %s): %s - noch kein Benutzer vorhanden. Ersten "
         "Admin unter /setup anlegen oder (empfohlen) per "

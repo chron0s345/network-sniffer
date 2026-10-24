@@ -66,6 +66,8 @@ def test_ac1_setup_page_shows_form_with_csrf_cookie(client: TestClient) -> None:
     assert "httponly" in cookie.lower()
     assert "samesite=strict" in cookie.lower()
     assert client.cookies.get(CSRF_COOKIE_NAME) == _csrf_from_page(response.text)
+    # Die Semgrep-Begründung steht als Jinja-Kommentar im Template und wird nicht ausgeliefert.
+    assert "nosemgrep" not in response.text
 
 
 def test_ac1_redirect_from_dashboard_lands_on_setup_page(client: TestClient) -> None:

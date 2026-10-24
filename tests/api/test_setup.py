@@ -1,5 +1,6 @@
 """KAN-37: Ersteinrichtung über ``POST /api/setup`` und Setup-Gate."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -14,17 +15,20 @@ from network_sniffer.storage.models import Role, User
 TOKEN_LOG_MARKER = "SETUP-TOKEN"  # noqa: S105 - Log-Marker, kein Passwort
 
 
-def _setup_token(caplog: pytest.LogCaptureFixture) -> str:
-    """Klartext-Token aus dem Startlog (Phase ``setup``: dort startet der ``client``)."""
-    records = [
-        r
-        for r in caplog.get_records("setup")
-        if r.name == "network_sniffer.main" and TOKEN_LOG_MARKER in r.msg
+def _token_from_records(records: list[logging.LogRecord]) -> str:
+    """Klartext-Token aus genau einer Logzeile mit dem Marker ``SETUP-TOKEN``."""
+    matching = [
+        r for r in records if r.name == "network_sniffer.main" and TOKEN_LOG_MARKER in r.msg
     ]
-    assert len(records) == 1
-    record = records[0]
+    assert len(matching) == 1
+    record = matching[0]
     assert isinstance(record.args, tuple)
     return str(record.args[1])
+
+
+def _setup_token(caplog: pytest.LogCaptureFixture) -> str:
+    """Token aus dem Startlog der Phase ``setup`` (dort startet die Fixture ``client``)."""
+    return _token_from_records(caplog.get_records("setup"))
 
 
 @pytest.fixture
@@ -187,11 +191,7 @@ def test_ac3_token_ttl_is_configurable(settings, caplog: pytest.LogCaptureFixtur
 
     short = settings.model_copy(update={"setup_token_ttl_minutes": 5})
     with TestClient(create_app(short), base_url="http://127.0.0.1:8765") as client:
-        token = next(
-            str(r.args[1])
-            for r in caplog.records
-            if r.name == "network_sniffer.main" and isinstance(r.args, tuple)
-        )
+        token = _token_from_records(caplog.records)  # App startet hier in der Phase "call"
         with time_machine.travel(datetime.now(UTC) + timedelta(minutes=6), tick=False):
             assert client.post("/api/setup", json=_payload(token)).status_code == 403
 
@@ -290,12 +290,14 @@ def test_setup_api_rejects_foreign_origin(client: TestClient, setup_token: str) 
     assert _user_count(client) == 0
 
 
-def test_ac4_parallel_setup_between_check_and_insert_answers_404(
+def test_ac4_api_maps_already_initialized_during_creation_to_404_and_drops_token(
     client: TestClient, setup_token: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import network_sniffer.api.setup as setup_module
     from network_sniffer.services.users import SetupAlreadyCompletedError
 
+    # Nur die Abbildung in der API: Der Service meldet "schon eingerichtet" (echter Wettlauf
+    # siehe tests/component/test_users_service.py::test_ac4_two_parallel_setups_create_one_admin).
     def raced(*_args: object, **_kwargs: object) -> None:
         raise SetupAlreadyCompletedError
 

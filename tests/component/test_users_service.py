@@ -1,5 +1,6 @@
 """KAN-37: Anlage des ersten Admins (Service) und Ausschluss weiterer Setups."""
 
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
@@ -148,3 +149,37 @@ def test_users_table_has_role_check_and_unique_username(engine: Engine) -> None:
     assert ["username_normalized"] in unique
     checks = [c["sqltext"] for c in inspector.get_check_constraints("users")]
     assert any("admin" in text and "analyst" in text for text in checks)
+
+
+def test_ac4_two_parallel_setups_create_one_admin(engine: Engine) -> None:
+    """Echter Wettlauf: Beide Threads bestehen die Prüfung "kein Benutzer", bevor einer schreibt.
+
+    Die Barriere sitzt im Passwort-Hashing, das zwischen Prüfung und bedingtem INSERT liegt.
+    """
+    barrier = threading.Barrier(2, timeout=10)
+
+    class SynchronizedPasswords(Passwords):
+        def hash(self, password: str) -> str:
+            barrier.wait()
+            return super().hash(password)
+
+    passwords = SynchronizedPasswords(time_cost=1, memory_cost_kib=8, parallelism=1)
+    outcomes: dict[str, str] = {}
+
+    def run(username: str) -> None:
+        try:
+            with Session(engine) as session:
+                _create(session, passwords, username=username)
+            outcomes[username] = "created"
+        except SetupAlreadyCompletedError:
+            outcomes[username] = "refused"
+
+    threads = [threading.Thread(target=run, args=(name,)) for name in ("thread-a", "thread-b")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert sorted(outcomes.values()) == ["created", "refused"]
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(User)) == 1
