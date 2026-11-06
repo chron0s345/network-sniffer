@@ -82,6 +82,17 @@ Je Entscheidungsfeld die gewählte Option und die verworfenen Alternativen.
 - Verworfen: **JWT** – Widerruf/Abmeldung nur umständlich, für eine lokale Anwendung unnötig.
 - Verworfen: **signierte Cookie-Sessions** – serverseitig nicht widerrufbar.
 - Verworfen: **bcrypt** – Argon2id ist aktuelle Empfehlung (OWASP), bcrypt kürzt Passwörter auf 72 Byte.
+- **Nachtrag (KAN-37, 2026-10-24) – Ersteinrichtung:** Präzisiert die bestehende Entscheidung, keine neue Option.
+  - Das **Setup-Token** (256 Bit, nur SHA-256-Hash im Speicher, TTL `NS_SETUP_TOKEN_TTL_MINUTES`, einmalig) wird im
+    Klartext genau einmal ins Server-Log bzw. auf die Konsole geschrieben. Das ist die **einzige bewusste Ausnahme**
+    von „keine Secrets im Log“: Ohne Benutzer gibt es keinen anderen authentifizierten Kanal zum Betreiber, und das
+    Log ist durch die ACL des Datenverzeichnisses auf SYSTEM, Administratoren und das Dienstkonto beschränkt. Das
+    Risiko ist durch kurze Gültigkeit, Einmaligkeit und das Verwerfen nach Anlage des ersten Benutzers begrenzt; ins
+    Windows-Ereignisprotokoll gelangt es nie. Empfohlen bleibt die CLI `network-sniffer create-admin` (ohne Token).
+  - **Betrieb mit genau einem Uvicorn-Worker:** Setup-Token, Setup-Status und – ohne `NS_SECRET_KEY` – der
+    CSRF-Schlüssel sind prozesslokal. Das passt zum Ein-Prozess-Monolithen; mehrere Worker würden das Token je Prozess
+    unterschiedlich erzeugen. Sollte je Mehrprozessbetrieb nötig werden, muss dieser Zustand in die DB wandern (neue ADR).
+  - **CSRF** konkret als signiertes Double-Submit-Cookie `ns_csrf` (HMAC-SHA256, Schlüssel aus `NS_SECRET_KEY`).
 
 ### Windows-Dienst
 - **Gewählt: eigener Dienst mit pywin32** (`win32serviceutil.ServiceFramework`) im gepackten EXE. `SvcStop` beendet

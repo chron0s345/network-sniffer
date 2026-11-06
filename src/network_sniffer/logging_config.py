@@ -37,4 +37,11 @@ def build_log_config() -> dict[str, Any]:
         "()": f"{__name__}.StripQueryStringFilter",
     }
     config["handlers"]["access"].setdefault("filters", []).append("strip_query")
+    # Anwendungslogs (u. a. das Setup-Token der Ersteinrichtung) über den Uvicorn-Handler (stderr).
+    # propagate bleibt an: Root hat unter Uvicorn keinen Handler; caplog hängt sich dort an.
+    config.setdefault("loggers", {})["network_sniffer"] = {
+        "handlers": ["default"],
+        "level": "INFO",
+        "propagate": True,
+    }
     return config

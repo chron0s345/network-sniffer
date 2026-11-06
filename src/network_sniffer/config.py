@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     tls_key: Path | None = None
     # Erlaubte Host-Header (Schutz vor DNS-Rebinding). None = Standard aus Host/Port.
     allowed_hosts: list[str] | None = None
+    # Gültigkeit des Setup-Tokens der Ersteinrichtung (KAN-37); danach neues Token nur per Neustart.
+    setup_token_ttl_minutes: int = Field(default=60, ge=1, le=1440)
+    # Kostenparameter für Argon2id (Standard: RFC 9106, Profil wenig Speicher; Tests: niedrig).
+    argon2_time_cost: int = Field(default=3, ge=1)
+    argon2_memory_cost_kib: int = Field(default=65536, ge=8)
+    argon2_parallelism: int = Field(default=4, ge=1)
 
     @field_validator("secret_key", mode="before")
     @classmethod
@@ -76,6 +82,15 @@ class Settings(BaseSettings):
                 f"NS_SECRET_KEY muss mindestens {SECRET_KEY_MIN_LENGTH} Zeichen lang sein"
             )
         return value
+
+    @model_validator(mode="after")
+    def _argon2_memory_fits_parallelism(self) -> "Settings":
+        # Argon2 verlangt mindestens 8 KiB Speicher je Lane.
+        if self.argon2_memory_cost_kib < 8 * self.argon2_parallelism:
+            raise ValueError(
+                "NS_ARGON2_MEMORY_COST_KIB muss mindestens 8 * NS_ARGON2_PARALLELISM sein"
+            )
+        return self
 
     @model_validator(mode="after")
     def _refuse_non_loopback_without_tls(self) -> "Settings":

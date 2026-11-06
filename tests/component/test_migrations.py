@@ -30,7 +30,7 @@ def test_migration_creates_settings_table_on_empty_database(settings: Settings) 
         with engine.connect() as connection:
             head = ScriptDirectory.from_config(alembic_config()).get_current_head()
             current = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-            assert current == head == "0001"
+            assert current == head == "0002"
     finally:
         engine.dispose()
 

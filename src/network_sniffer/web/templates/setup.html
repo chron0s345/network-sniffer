@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Ersteinrichtung - network-sniffer{% endblock %}
+{% block content %}
+  <h1>Ersteinrichtung</h1>
+  <p>Es existiert noch kein Benutzer. Lege hier den ersten Administrator an.</p>
+  <p class="hint">
+    Das Setup-Token steht einmalig im Server-Log bzw. auf der Konsole (Zeile „SETUP-TOKEN“) und ist nur
+    begrenzt gültig. Ist es abgelaufen, die Anwendung neu starten. Alternativ (empfohlen):
+    <code>network-sniffer create-admin --username &lt;name&gt;</code>
+  </p>
+  {% if error %}
+    <p class="form-error" role="alert">{{ error }}</p>
+  {% endif %}
+  {# Bewusste Ausnahme von der Semgrep-Regel django-no-csrf-token: Jinja2, kein Django. Der CSRF-Schutz
+     läuft über das signierte Double-Submit-Feld csrf_token (security/csrf.py, KAN-37). #}
+  {# nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token #}
+  <form class="form" method="post" action="{{ request.url.path }}" autocomplete="off">
+    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+    <label for="username">Benutzername</label>
+    <input id="username" name="username" type="text" required maxlength="64" value="{{ username }}"
+           autocomplete="username">
+    <label for="password">Passwort (mindestens {{ password_min_length }} Zeichen)</label>
+    <input id="password" name="password" type="password" required minlength="{{ password_min_length }}"
+           maxlength="1024" autocomplete="new-password">
+    <label for="password_confirm">Passwort wiederholen</label>
+    <input id="password_confirm" name="password_confirm" type="password" required
+           minlength="{{ password_min_length }}" maxlength="1024" autocomplete="new-password">
+    <label for="token">Setup-Token</label>
+    <input id="token" name="token" type="password" required maxlength="256" autocomplete="off">
+    <button type="submit">Administrator anlegen</button>
+  </form>
+{% endblock %}
